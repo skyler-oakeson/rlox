@@ -1,11 +1,14 @@
 use std::env;
 use std::fs;
-use std::io::{stdin, stdout, BufRead, Read, Write};
+use std::io::{stdin, stdout, Write};
+use std::process::exit;
 
-mod errors;
-use errors::UsageError;
-
+mod error_fmt;
 mod scanner;
+mod token;
+
+use scanner::scan_tokens;
+use token::Token;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -17,17 +20,19 @@ pub fn parse_args(args: Vec<String>) {
         1 => run_prompt(),
         2 => run_file(args.get(1).unwrap()),
         _ => {
-            UsageError::throw(args, 1);
+            println!("Too many args");
+            std::process::exit(-1)
         }
     }
 }
 
 fn run_file(path: &str) {
     match fs::read_to_string(path) {
-        Ok(s) => {
-            let _ = s.lines().map(|l| run(l.to_string()));
+        Ok(s) => s.lines().for_each(|l| run(l.to_string())),
+        Err(err) => {
+            println!("{:?}", err);
+            std::process::exit(-1)
         }
-        Err(..) => UsageError::throw(env::args().collect(), 2),
     }
 }
 
@@ -43,5 +48,17 @@ fn run_prompt() {
 }
 
 fn run(source: String) {
-    println!("Running {source}");
+    // Scanning phase
+    let tokens: Vec<Token> = match scan_tokens(source) {
+        Ok(tokens) => tokens,
+        Err(errors) => {
+            error_fmt::report_errors(&errors);
+            println!("{0} Errors detected in scanning phase.", errors.len());
+            exit(-1)
+        }
+    };
+
+    for token in tokens {
+        println!("{}", token)
+    }
 }
