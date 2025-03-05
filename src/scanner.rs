@@ -61,23 +61,23 @@ impl Scanner {
             '\n' => self.line += 1,
             '\t' => {},
             '!' => { 
-                let token = if self.is_next('=') { TokenType::BangEqual } else { TokenType::Bang };
+                let token = if self.advance_if('=') { TokenType::BangEqual } else { TokenType::Bang };
                 self.add_token(token)
             },
             '=' => {
-                let token = if self.is_next('=') { TokenType::EqualEqual } else { TokenType::Equal };
+                let token = if self.advance_if('=') { TokenType::EqualEqual } else { TokenType::Equal };
                 self.add_token(token)
             }
             '>' => {
-                let token = if self.is_next('=') { TokenType::GreaterEqual } else { TokenType::Greater };
+                let token = if self.advance_if('=') { TokenType::GreaterEqual } else { TokenType::Greater };
                 self.add_token(token)
             }
             '<' => {
-                let token = if self.is_next('=') { TokenType::LessEqual } else { TokenType::Less };
+                let token = if self.advance_if('=') { TokenType::LessEqual } else { TokenType::Less };
                 self.add_token(token)
             }
             '/' => {
-                if self.is_next('/') {
+                if self.advance_if('/') {
                     while match self.peek() {
                         Some(val) => { 
                             let c = *val as char;
@@ -116,17 +116,22 @@ impl Scanner {
     }
 
     fn peek(&self) -> Option<&u8> {
-        self.source.get(self.col + 1)
+        self.source.get(self.col)
     }
 
-    fn is_next(&mut self, expected: char) -> bool {
+    fn advance_if(&mut self, expected: char) -> bool {
         let did_match = match self.peek() {
-            Some(c) => *c as char == expected,
+            Some(c) => { 
+                let res = *c as char == expected;
+                let next = *c as char;
+                println!("{res} {next} == {expected}");
+                res
+            },
             None => false,
         };
 
         if did_match {
-            self.col += 1
+            self.advance();
         };
 
         did_match
@@ -169,6 +174,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_peek() {
+        let mut scanner = Scanner::new();
+        scanner.source = "123".to_string().into_bytes();
+
+        assert_eq!('1', *scanner.peek().unwrap() as char);
+        assert_eq!('1', *scanner.peek().unwrap() as char);
+        assert_ne!('2', *scanner.peek().unwrap() as char);
+        assert_ne!(*scanner.advance().unwrap() as char, *scanner.peek().unwrap() as char);
+    }
+
+    #[test]
     fn test_scan_single_char_tokens() {
         let tokens = [
             TokenType::LeftParen,
@@ -191,12 +207,12 @@ mod tests {
     }
 
     #[test]
-    fn test_is_next() {
+    fn test_advance_if() {
         let mut scanner = Scanner::new();
         scanner.source = "123".to_string().into_bytes();
-        assert_eq!(scanner.is_next('2'), true);
-        assert_eq!(scanner.is_next('1'), false);
-        assert_eq!(scanner.is_next('3'), true);
+        assert_eq!(scanner.advance_if('1'), true);
+        assert_eq!(scanner.advance_if('3'), false);
+        assert_eq!(scanner.advance_if('2'), true);
     }
 
     #[test]
