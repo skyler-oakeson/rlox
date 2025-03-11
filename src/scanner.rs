@@ -1,5 +1,6 @@
 use crate::error_fmt::Error;
 use crate::token::{Literal, Token, TokenType};
+use std::collections::hash_map;
 
 pub struct Scanner {
     source: Vec<u8>,
@@ -44,6 +45,12 @@ impl Scanner {
 
     fn scan_lexeme(&mut self) {
         let c = *self.advance().unwrap() as char;
+
+        if !c.is_ascii() {
+            self.add_error();
+            self.advance_until(|_, c| c.is_ascii())
+        }
+
         match c {
             '(' => self.add_token(TokenType::LeftParen),
             ')' => self.add_token(TokenType::RightParen),
@@ -101,6 +108,8 @@ impl Scanner {
             _ => {
                 if c.is_digit(10) {
                     self.number()
+                } else if c.is_ascii_alphabetic() {
+                    self.identifier()
                 } else {
                     self.add_error()
                 }
@@ -145,6 +154,8 @@ impl Scanner {
         println!("{num}");
         self.add_token_literal(TokenType::Number, Some(Literal::Number(num)))
     }
+
+    fn identifier(&mut self) {}
 
     fn is_end(&self) -> bool {
         self.col >= self.source.len()
@@ -249,7 +260,7 @@ mod tests {
     }
 
     #[test]
-    fn test_scan_literals() {
+    fn test_scan_number_literals() {
         let tokens = [TokenType::Number];
         let literal_string = "12".to_string();
         let literal_tokens: Vec<Token> =
@@ -259,6 +270,12 @@ mod tests {
             assert_eq!(tokens[i], literal_tokens[i].token_type)
         }
     }
+
+    #[test]
+    fn test_scan_string_literals() {}
+
+    #[test]
+    fn test_scan_identifier_literals() {}
 
     #[test]
     fn test_advance_if() {
