@@ -42,7 +42,6 @@ impl Scanner {
         self.tokens.clone()
     }
 
-    #[rustfmt::skip]
     fn scan_lexeme(&mut self) {
         let c = *self.advance().unwrap() as char;
         match c {
@@ -56,77 +55,108 @@ impl Scanner {
             '+' => self.add_token(TokenType::Plus),
             ';' => self.add_token(TokenType::Semicolon),
             '*' => self.add_token(TokenType::Star),
-            ' ' => {},
-            '\r' => {},
+            ' ' => {}
+            '\r' => {}
             '\n' => self.line += 1,
-            '\t' => {},
-            '!' => { 
-                let token = if self.advance_if('=') { TokenType::BangEqual } else { TokenType::Bang };
+            '\t' => {}
+            '!' => {
+                let token = if self.advance_if('=') {
+                    TokenType::BangEqual
+                } else {
+                    TokenType::Bang
+                };
                 self.add_token(token)
-            },
+            }
             '=' => {
-                let token = if self.advance_if('=') { TokenType::EqualEqual } else { TokenType::Equal };
+                let token = if self.advance_if('=') {
+                    TokenType::EqualEqual
+                } else {
+                    TokenType::Equal
+                };
                 self.add_token(token)
             }
             '>' => {
-                let token = if self.advance_if('=') { TokenType::GreaterEqual } else { TokenType::Greater };
+                let token = if self.advance_if('=') {
+                    TokenType::GreaterEqual
+                } else {
+                    TokenType::Greater
+                };
                 self.add_token(token)
             }
             '<' => {
-                let token = if self.advance_if('=') { TokenType::LessEqual } else { TokenType::Less };
+                let token = if self.advance_if('=') {
+                    TokenType::LessEqual
+                } else {
+                    TokenType::Less
+                };
                 self.add_token(token)
             }
             '/' => {
                 if self.advance_if('/') {
-                    while match self.peek() {
-                        Some(val) => { 
-                            let c = *val as char;
-                            if c == '\n' { false } else { true }
-                        }
-                        None => { false }
-                    } { self.advance(); }
-                } else { self.add_token(TokenType::Slash) };
+                    self.advance_until(|_s, c| if c == '\n' { true } else { false });
+                } else {
+                    self.add_token(TokenType::Slash)
+                };
             }
-            _ => { 
-                //if c.is_digit(10) {
-                //    self.number()
-                //}
-                self.add_error()
-            },
+            _ => {
+                if c.is_digit(10) {
+                    self.number()
+                } else {
+                    self.add_error()
+                }
+            }
         }
     }
 
-    //fn number(&mut self) {
-    //   while match self.peek() {
-    //       Some(val) => { 
-    //           let c = *val as char;
-    //           if c.is_digit(10) {
-    //               true
-    //           } else {
-    //               false
-    //           }
-    //       }
-    //       None => { false }
-    //   } { self.advance(); }
-    //   self.add_token_literal(TokenType::Number, Literal())
-    //}
+    fn advance_until(&mut self, mut until: impl FnMut(&mut Scanner, char) -> bool) {
+        while !match self.peek(false) {
+            Some(val) => {
+                let c = *val as char;
+                until(self, c)
+            }
+            None => true,
+        } {
+            self.advance();
+        }
+    }
+
+    fn number(&mut self) {
+        self.advance_until(|s, c| match c.is_digit(10) {
+            true => false,
+            false => {
+                let mut stop = true;
+                if c == '.' {
+                    let next = s.peek(true);
+                    let res = next.is_some_and(|n| (*n as char).is_digit(10));
+                    match res {
+                        true => stop = false,
+                        false => stop = true,
+                    }
+                };
+                stop
+            }
+        });
+        let num = String::from_utf8(Vec::from_iter(
+            self.source[self.start..self.col].iter().cloned(),
+        ))
+        .unwrap()
+        .parse::<f64>()
+        .unwrap();
+        println!("{num}");
+        self.add_token_literal(TokenType::Number, Some(Literal::Number(num)))
+    }
 
     fn is_end(&self) -> bool {
         self.col >= self.source.len()
     }
 
-    fn peek(&self) -> Option<&u8> {
-        self.source.get(self.col)
+    fn peek(&self, one_extra: bool) -> Option<&u8> {
+        self.source.get(self.col + one_extra as usize)
     }
 
     fn advance_if(&mut self, expected: char) -> bool {
-        let did_match = match self.peek() {
-            Some(c) => { 
-                let res = *c as char == expected;
-                let next = *c as char;
-                println!("{res} {next} == {expected}");
-                res
-            },
+        let did_match = match self.peek(false) {
+            Some(c) => *c as char == expected,
             None => false,
         };
 
@@ -178,10 +208,22 @@ mod tests {
         let mut scanner = Scanner::new();
         scanner.source = "123".to_string().into_bytes();
 
-        assert_eq!('1', *scanner.peek().unwrap() as char);
-        assert_eq!('1', *scanner.peek().unwrap() as char);
-        assert_ne!('2', *scanner.peek().unwrap() as char);
-        assert_ne!(*scanner.advance().unwrap() as char, *scanner.peek().unwrap() as char);
+        assert_eq!('1', *scanner.peek(false).unwrap() as char);
+        assert_eq!('1', *scanner.peek(false).unwrap() as char);
+        assert_ne!('2', *scanner.peek(false).unwrap() as char);
+        assert_ne!(
+            *scanner.advance().unwrap() as char,
+            *scanner.peek(false).unwrap() as char
+        );
+    }
+
+    #[test]
+    fn test_advance_until() {
+        let mut scanner = Scanner::new();
+        scanner.source = "123".to_string().into_bytes();
+        // Should advance until the end of the string
+        scanner.advance_until(|_s, c| if c.is_digit(10) { false } else { true });
+        assert_eq!(scanner.advance(), None)
     }
 
     #[test]
@@ -207,6 +249,18 @@ mod tests {
     }
 
     #[test]
+    fn test_scan_literals() {
+        let tokens = [TokenType::Number];
+        let literal_string = "12".to_string();
+        let literal_tokens: Vec<Token> =
+            scan_tokens(literal_string).expect("literal_string has an invalid literal");
+        for i in 0..tokens.len() {
+            println!("{}", literal_tokens[i]);
+            assert_eq!(tokens[i], literal_tokens[i].token_type)
+        }
+    }
+
+    #[test]
     fn test_advance_if() {
         let mut scanner = Scanner::new();
         scanner.source = "123".to_string().into_bytes();
@@ -224,10 +278,12 @@ mod tests {
             TokenType::BangEqual,
             TokenType::Less,
             TokenType::LessEqual,
-            TokenType::Greater
+            TokenType::Greater,
         ];
         let single_or_double_string = "\t! >= ==!= < <= >\n".to_string();
-        let single_or_double_tokens = scan_tokens(single_or_double_string).expect("test_scan_single_or_double_char_tokens has an invalid single_or_double_string");
+        let single_or_double_tokens = scan_tokens(single_or_double_string).expect(
+            "test_scan_single_or_double_char_tokens has an invalid single_or_double_string",
+        );
         for i in 0..tokens.len() {
             assert_eq!(tokens[i], single_or_double_tokens[i].token_type)
         }
