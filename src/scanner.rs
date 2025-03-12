@@ -1,6 +1,6 @@
 use crate::error_fmt::Error;
 use crate::token::{Literal, Token, TokenType};
-use std::collections::hash_map;
+use std::collections::hash_map::HashMap;
 
 pub struct Scanner {
     source: Vec<u8>,
@@ -9,10 +9,44 @@ pub struct Scanner {
     line: usize,
     tokens: Vec<Token>,
     errors: Vec<Error>,
+    keywords: HashMap<String, TokenType>,
 }
 
+impl Default for Scanner {
+    fn default() -> Scanner {
+        Scanner {
+            source: Vec::new(),
+            tokens: Vec::new(),
+            errors: Vec::new(),
+            start: 0,
+            col: 0,
+            line: 1,
+            keywords: vec![
+                ("and", TokenType::And),
+                ("class", TokenType::Class),
+                ("else", TokenType::Else),
+                ("false", TokenType::False),
+                ("fun", TokenType::Fun),
+                ("for", TokenType::For),
+                ("if", TokenType::If),
+                ("nil", TokenType::Nil),
+                ("or", TokenType::Or),
+                ("print", TokenType::Print),
+                ("return", TokenType::Return),
+                ("super", TokenType::Super),
+                ("this", TokenType::This),
+                ("true", TokenType::True),
+                ("var", TokenType::Var),
+                ("while", TokenType::While),
+                ("eof", TokenType::Eof),
+            ].into_iter().map(|(k, v)| (String::from(k), v)).collect()
+        }
+    }
+}
+
+
 pub fn scan_tokens(input: String) -> Result<Vec<Token>, Vec<Error>> {
-    let mut scanner = Scanner::new();
+    let mut scanner = Scanner::default();
     scanner.scan_tokens(input);
     if scanner.has_errors() {
         Err(scanner.errors)
@@ -22,16 +56,6 @@ pub fn scan_tokens(input: String) -> Result<Vec<Token>, Vec<Error>> {
 }
 
 impl Scanner {
-    pub fn new() -> Self {
-        Scanner {
-            source: Vec::new(),
-            tokens: Vec::new(),
-            errors: Vec::new(),
-            start: 0,
-            col: 0,
-            line: 1,
-        }
-    }
 
     pub fn scan_tokens(&mut self, input: String) -> Vec<Token> {
         self.source = input.into_bytes();
@@ -151,11 +175,23 @@ impl Scanner {
         .unwrap()
         .parse::<f64>()
         .unwrap();
-        println!("{num}");
         self.add_token_literal(TokenType::Number, Some(Literal::Number(num)))
     }
 
-    fn identifier(&mut self) {}
+    fn identifier(&mut self) {
+        self.advance_until(|_, c| {
+            !c.is_alphanumeric()
+        });
+        
+        let identifier = String::from_utf8(Vec::from_iter(
+            self.source[self.start..self.col].iter().cloned(),
+        )).unwrap();
+
+        match self.keywords.get(&identifier) {
+            Some(tt) => self.add_token(tt.clone()),
+            None => { self.add_token_literal(TokenType::Identifier, Some(Literal::Identifier(identifier))) },
+        };
+    }
 
     fn is_end(&self) -> bool {
         self.col >= self.source.len()
@@ -216,7 +252,7 @@ mod tests {
 
     #[test]
     fn test_peek() {
-        let mut scanner = Scanner::new();
+        let mut scanner = Scanner::default();
         scanner.source = "123".to_string().into_bytes();
 
         assert_eq!('1', *scanner.peek(false).unwrap() as char);
@@ -230,7 +266,7 @@ mod tests {
 
     #[test]
     fn test_advance_until() {
-        let mut scanner = Scanner::new();
+        let mut scanner = Scanner::default();
         scanner.source = "123".to_string().into_bytes();
         // Should advance until the end of the string
         scanner.advance_until(|_s, c| if c.is_digit(10) { false } else { true });
@@ -279,7 +315,7 @@ mod tests {
 
     #[test]
     fn test_advance_if() {
-        let mut scanner = Scanner::new();
+        let mut scanner = Scanner::default();
         scanner.source = "123".to_string().into_bytes();
         assert_eq!(scanner.advance_if('1'), true);
         assert_eq!(scanner.advance_if('3'), false);
