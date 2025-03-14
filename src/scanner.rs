@@ -39,11 +39,13 @@ impl Default for Scanner {
                 ("var", TokenType::Var),
                 ("while", TokenType::While),
                 ("eof", TokenType::Eof),
-            ].into_iter().map(|(k, v)| (String::from(k), v)).collect()
+            ]
+            .into_iter()
+            .map(|(k, v)| (String::from(k), v))
+            .collect(),
         }
     }
 }
-
 
 pub fn scan_tokens(input: String) -> Result<Vec<Token>, Vec<Error>> {
     let mut scanner = Scanner::default();
@@ -56,7 +58,6 @@ pub fn scan_tokens(input: String) -> Result<Vec<Token>, Vec<Error>> {
 }
 
 impl Scanner {
-
     pub fn scan_tokens(&mut self, input: String) -> Vec<Token> {
         self.source = input.into_bytes();
 
@@ -71,8 +72,8 @@ impl Scanner {
         let c = *self.advance().unwrap() as char;
 
         if !c.is_ascii() {
-            self.add_error();
-            self.advance_until(|_, c| c.is_ascii())
+            self.add_error("Lexical Error: Unexpected character".to_string());
+            let _ = self.advance_until(|_, c| Ok(c.is_ascii()));
         }
 
         match c {
@@ -86,6 +87,7 @@ impl Scanner {
             '+' => self.add_token(TokenType::Plus),
             ';' => self.add_token(TokenType::Semicolon),
             '*' => self.add_token(TokenType::Star),
+            '"' => self.string(),
             ' ' => {}
             '\r' => {}
             '\n' => self.line += 1,
@@ -124,7 +126,8 @@ impl Scanner {
             }
             '/' => {
                 if self.advance_if('/') {
-                    self.advance_until(|_s, c| if c == '\n' { true } else { false });
+                    let _ =
+                        self.advance_until(|_s, c| if c == '\n' { Ok(true) } else { Ok(false) });
                 } else {
                     self.add_token(TokenType::Slash)
                 };
@@ -135,27 +138,31 @@ impl Scanner {
                 } else if c.is_ascii_alphabetic() {
                     self.identifier()
                 } else {
-                    self.add_error()
+                    self.add_error("Lexical Error: Unexpected character".to_string())
                 }
             }
         }
     }
 
-    fn advance_until(&mut self, mut until: impl FnMut(&mut Scanner, char) -> bool) {
+    fn advance_until(
+        &mut self,
+        mut until: impl FnMut(&mut Scanner, char) -> Result<bool, String>,
+    ) -> Result<(), String> {
         while !match self.peek(false) {
             Some(val) => {
                 let c = *val as char;
-                until(self, c)
+                until(self, c)?
             }
             None => true,
         } {
             self.advance();
         }
+        Ok(())
     }
 
     fn number(&mut self) {
-        self.advance_until(|s, c| match c.is_digit(10) {
-            true => false,
+        let _ = self.advance_until(|s, c| match c.is_digit(10) {
+            true => Ok(false),
             false => {
                 let mut stop = true;
                 if c == '.' {
@@ -166,7 +173,7 @@ impl Scanner {
                         false => stop = true,
                     }
                 };
-                stop
+                Ok(stop)
             }
         });
         let num = String::from_utf8(Vec::from_iter(
@@ -179,18 +186,46 @@ impl Scanner {
     }
 
     fn identifier(&mut self) {
-        self.advance_until(|_, c| {
-            !c.is_alphanumeric()
-        });
-        
+        let _ = self.advance_until(|_, c| Ok(!c.is_alphanumeric()));
+
         let identifier = String::from_utf8(Vec::from_iter(
             self.source[self.start..self.col].iter().cloned(),
-        )).unwrap();
+        ))
+        .unwrap();
 
         match self.keywords.get(&identifier) {
             Some(tt) => self.add_token(tt.clone()),
-            None => { self.add_token_literal(TokenType::Identifier, Some(Literal::Identifier(identifier))) },
+            None => {
+                self.add_token_literal(TokenType::Identifier, Some(Literal::Identifier(identifier)))
+            }
         };
+    }
+
+    fn string(&mut self) {
+        let res = self.advance_until(|s, c| {
+            if c == '\n' {
+                s.line += 1
+            };
+            if s.is_end() && c != '"' {
+                Err("Unterminated string.".to_string())
+            } else {
+                Ok(c == '"')
+            }
+        });
+
+        match res {
+            Err(message) => self.add_error(message),
+            Ok(_) => {
+                // + 1 to start to avoid quote
+                let string = String::from_utf8(Vec::from_iter(
+                    self.source[self.start + 1..self.col].iter().cloned(),
+                ))
+                .unwrap();
+                self.add_token_literal(TokenType::String, Some(Literal::String(string)));
+                // Advace past the second quote
+                self.advance();
+            }
+        }
     }
 
     fn is_end(&self) -> bool {
@@ -229,13 +264,12 @@ impl Scanner {
             .push(Token::new(token_type, literal, self.line, self.col))
     }
 
-    fn add_error(&mut self) {
-        let message = "Lexical Error: Unexpected character".to_string();
-        let text = String::from_utf8(self.source.clone())
+    fn add_error(&mut self, message: String) {
+        let line = String::from_utf8(self.source.clone())
             .unwrap_or("Invalid UTF8 chars in source.".to_string());
         self.errors.push(Error::new(
             message,
-            text,
+            line,
             self.line.clone(),
             self.col.clone(),
         ))
@@ -269,7 +303,7 @@ mod tests {
         let mut scanner = Scanner::default();
         scanner.source = "123".to_string().into_bytes();
         // Should advance until the end of the string
-        scanner.advance_until(|_s, c| if c.is_digit(10) { false } else { true });
+        let _ = scanner.advance_until(|_s, c| if c.is_digit(10) { Ok(false) } else { Ok(true) });
         assert_eq!(scanner.advance(), None)
     }
 
@@ -297,21 +331,98 @@ mod tests {
 
     #[test]
     fn test_scan_number_literals() {
-        let tokens = [TokenType::Number];
-        let literal_string = "12".to_string();
+        let tokens = [
+            (TokenType::Number, 12.3),
+            (TokenType::Number, 12.0),
+            (TokenType::Dot, 0.0),
+            (TokenType::Dot, 0.0),
+            (TokenType::Number, 3.0),
+        ];
+        let literal_string = "12.3 12..3".to_string();
         let literal_tokens: Vec<Token> =
             scan_tokens(literal_string).expect("literal_string has an invalid literal");
         for i in 0..tokens.len() {
-            println!("{}", literal_tokens[i]);
-            assert_eq!(tokens[i], literal_tokens[i].token_type)
+            assert_eq!(tokens[i].0, literal_tokens[i].token_type);
+            assert_eq!(
+                tokens[i].1,
+                literal_tokens[i]
+                    .literal
+                    .to_owned()
+                    .unwrap_or(Literal::Number(0.0))
+                    .as_number()
+                    .unwrap()
+            )
         }
     }
 
     #[test]
-    fn test_scan_string_literals() {}
+    fn test_scan_string_literals() {
+        let tokens = [
+            (TokenType::String, "I"),
+            (TokenType::String, "waited"),
+            (TokenType::Var, ""),
+            (TokenType::String, "in"),
+            (TokenType::And, ""),
+            (TokenType::String, "the cinema too\n"),
+            (TokenType::Dot, ""),
+        ];
+        let literal_string = "\"I\" \"waited\" var \"in\" and \"the cinema too\n\".".to_string();
+        let literal_tokens: Vec<Token> =
+            scan_tokens(literal_string).expect("literal_string has an invalid literal");
+        for i in 0..tokens.len() {
+            assert_eq!(tokens[i].0, literal_tokens[i].token_type);
+            assert_eq!(
+                tokens[i].1,
+                literal_tokens[i]
+                    .literal
+                    .to_owned()
+                    .unwrap_or(Literal::String("".to_string()))
+                    .as_string()
+                    .unwrap()
+            )
+        }
+    }
 
     #[test]
-    fn test_scan_identifier_literals() {}
+    fn test_scan_identifier_literals() {
+        let tokens = [
+            (TokenType::And, ""),
+            (TokenType::Class, ""),
+            (TokenType::Else, ""),
+            (TokenType::False, ""),
+            (TokenType::Fun, ""),
+            (TokenType::For, ""),
+            (TokenType::If, ""),
+            (TokenType::Nil, ""),
+            (TokenType::Or, ""),
+            (TokenType::Print, ""),
+            (TokenType::Return, ""),
+            (TokenType::Super, ""),
+            (TokenType::This, ""),
+            (TokenType::True, ""),
+            (TokenType::Var, ""),
+            (TokenType::While, ""),
+            (TokenType::Eof, ""),
+            (TokenType::Identifier, "test"),
+            (TokenType::Identifier, "THIS"),
+            (TokenType::Identifier, "Let"),
+        ];
+        let literal_string = "and class else false fun for if nil or print return super this true var while eof test THIS Let".to_string();
+        let literal_tokens: Vec<Token> =
+            scan_tokens(literal_string).expect("literal_string has an invalid literal");
+        for i in 0..tokens.len() {
+            assert_eq!(tokens[i].0, literal_tokens[i].token_type);
+            assert_eq!(
+                tokens[i].1,
+                literal_tokens[i]
+                    .literal
+                    .to_owned()
+                    .unwrap_or(Literal::Identifier("".to_string()))
+                    .as_identifier()
+                    .unwrap()
+            )
+        }
+    }
 
     #[test]
     fn test_advance_if() {

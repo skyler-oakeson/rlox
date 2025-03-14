@@ -57,11 +57,34 @@ impl fmt::Display for TokenType {
     }
 }
 
-#[derive(Debug, Clone)]
+macro_rules! as_variant {
+    ($value:expr, $variant:path) => {
+        match $value {
+            $variant(x) => Some(x),
+            _ => None,
+        }
+    };
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Identifier(String),
-    Str(String),
+    String(String),
     Number(f64),
+}
+
+impl Literal {
+    pub fn as_number(self) -> Option<f64> {
+        as_variant!(self, Literal::Number)
+    }
+
+    pub fn as_identifier(self) -> Option<String> {
+        as_variant!(self, Literal::Identifier)
+    }
+
+    pub fn as_string(self) -> Option<String> {
+        as_variant!(self, Literal::String)
+    }
 }
 
 #[derive(Clone)]
