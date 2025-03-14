@@ -206,7 +206,7 @@ impl Scanner {
             if c == '\n' {
                 s.line += 1
             };
-            if s.is_end() && c != '"' {
+            if s.peek(true).is_none() && c != '"' {
                 Err("Unterminated string.".to_string())
             } else {
                 // Advances past the second quote
@@ -449,6 +449,22 @@ mod tests {
         );
         for i in 0..tokens.len() {
             assert_eq!(tokens[i], single_or_double_tokens[i].token_type)
+        }
+    }
+
+    #[test]
+    fn test_errors() {
+        let error = Error {
+            message: "Unterminated string.".to_string(),
+            text: "\"test".to_string(),
+            line: 1,
+            col: 5,
+        };
+
+        let error_string = "\"test".to_string();
+        let errors = scan_tokens(error_string).unwrap_err();
+        for i in 0..errors.len() {
+            assert_eq!(error.message, errors[i].message)
         }
     }
 }
