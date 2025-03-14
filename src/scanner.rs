@@ -209,7 +209,8 @@ impl Scanner {
             if s.is_end() && c != '"' {
                 Err("Unterminated string.".to_string())
             } else {
-                Ok(c == '"')
+                // Advances past the second quote
+                Ok(s.advance_if('"'))
             }
         });
 
@@ -218,12 +219,10 @@ impl Scanner {
             Ok(_) => {
                 // + 1 to start to avoid quote
                 let string = String::from_utf8(Vec::from_iter(
-                    self.source[self.start + 1..self.col].iter().cloned(),
+                    self.source[self.start + 1..self.col - 1].iter().cloned(),
                 ))
                 .unwrap();
                 self.add_token_literal(TokenType::String, Some(Literal::String(string)));
-                // Advace past the second quote
-                self.advance();
             }
         }
     }
