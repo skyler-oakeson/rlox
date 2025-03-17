@@ -28,7 +28,7 @@ pub fn parse_args(args: Vec<String>) {
 
 fn run_file(path: &str) {
     match fs::read_to_string(path) {
-        Ok(s) => s.lines().for_each(|l| run(l.to_string())),
+        Ok(s) => run(s),
         Err(err) => {
             println!("{:?}", err);
             std::process::exit(-1)

@@ -71,11 +71,6 @@ impl Scanner {
     fn scan_lexeme(&mut self) {
         let c = *self.advance().unwrap() as char;
 
-        if !c.is_ascii() {
-            self.add_error("Lexical Error: Unexpected character".to_string());
-            let _ = self.advance_until(|_, c| Ok(c.is_ascii()));
-        }
-
         match c {
             '(' => self.add_token(TokenType::LeftParen),
             ')' => self.add_token(TokenType::RightParen),
@@ -126,8 +121,9 @@ impl Scanner {
             }
             '/' => {
                 if self.advance_if('/') {
-                    let _ =
-                        self.advance_until(|_s, c| if c == '\n' { Ok(true) } else { Ok(false) });
+                    self.comment();
+                } else if self.advance_if('*') {
+                    self.block_comment();
                 } else {
                     self.add_token(TokenType::Slash)
                 };
@@ -138,7 +134,7 @@ impl Scanner {
                 } else if c.is_ascii_alphabetic() {
                     self.identifier()
                 } else {
-                    self.add_error("Lexical Error: Unexpected character".to_string())
+                    self.add_error("Unexpected character.".to_string())
                 }
             }
         }
@@ -158,6 +154,41 @@ impl Scanner {
             self.advance();
         }
         Ok(())
+    }
+
+    fn comment(&mut self) {
+        let _ = self.advance_until(|s, c| {
+            if c == '\n' {
+                s.line += 1;
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        });
+    }
+
+    fn block_comment(&mut self) {
+        let res = self.advance_until(|s, c| {
+            if c == '\n' {
+                s.line += 1;
+                Ok(false)
+            } else if c == '*' && s.peek(true).is_some_and(|x| (*x as char) == '/') {
+                s.advance();
+                Ok(s.advance_if('/'))
+            } else if c == '/' && s.peek(true).is_some_and(|x| (*x as char) == '*') {
+                s.advance();
+                s.advance();
+                s.block_comment();
+                Ok(false)
+            } else if s.peek(false).is_none() {
+                Err("Unterminated block comment.".to_string())
+            } else {
+                Ok(false)
+            }
+        });
+        if res.is_err() {
+            self.add_error(res.unwrap_err())
+        }
     }
 
     fn number(&mut self) {
@@ -217,7 +248,7 @@ impl Scanner {
         match res {
             Err(message) => self.add_error(message),
             Ok(_) => {
-                // + 1 to start to avoid quote
+                // + 1 and -1 to cut quotes off
                 let string = String::from_utf8(Vec::from_iter(
                     self.source[self.start + 1..self.col - 1].iter().cloned(),
                 ))
@@ -267,7 +298,7 @@ impl Scanner {
         let line = String::from_utf8(self.source.clone())
             .unwrap_or("Invalid UTF8 chars in source.".to_string());
         self.errors.push(Error::new(
-            message,
+            "Lexical Error: ".to_string() + &message,
             line,
             self.line.clone(),
             self.col.clone(),
@@ -362,10 +393,10 @@ mod tests {
             (TokenType::Var, ""),
             (TokenType::String, "in"),
             (TokenType::And, ""),
-            (TokenType::String, "the cinema too\n"),
+            (TokenType::String, "the \ncinema too\n"),
             (TokenType::Dot, ""),
         ];
-        let literal_string = "\"I\" \"waited\" var \"in\" and \"the cinema too\n\".".to_string();
+        let literal_string = "\"I\" \"waited\" var \"in\" and \"the \ncinema too\n\".".to_string();
         let literal_tokens: Vec<Token> =
             scan_tokens(literal_string).expect("literal_string has an invalid literal");
         for i in 0..tokens.len() {
@@ -455,16 +486,26 @@ mod tests {
     #[test]
     fn test_errors() {
         let error = Error {
-            message: "Unterminated string.".to_string(),
-            text: "\"test".to_string(),
+            message: "Lexical Error: Unexpected character.".to_string(),
+            text: "".to_string(),
             line: 1,
-            col: 5,
+            col: 1,
         };
 
-        let error_string = "\"test".to_string();
+        let error2 = Error {
+            message: "Lexical Error: Unterminated string.".to_string(),
+            text: "".to_string(),
+            line: 1,
+            col: 7,
+        };
+
+        let error_string = "~ \"test ".to_string();
         let errors = scan_tokens(error_string).unwrap_err();
-        for i in 0..errors.len() {
-            assert_eq!(error.message, errors[i].message)
-        }
+        assert_eq!(error.message, errors[0].message);
+        assert_eq!(error.line, errors[0].line);
+        assert_eq!(error.col, errors[0].col);
+        assert_eq!(error2.message, errors[1].message);
+        assert_eq!(error2.line, errors[1].line);
+        assert_eq!(error2.col, errors[1].col);
     }
 }

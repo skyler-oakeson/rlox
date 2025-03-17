@@ -1,0 +1,19 @@
+// this is a test
+var link = "Test";
+/*
+Do the
+    /*
+    inner
+    comments
+    */
+block comments work?
+*/
+if link == "Test" {
+    print "true"
+}
+
+"test
+
+this
+"
+
