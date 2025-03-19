@@ -29,23 +29,23 @@ impl Default for Scanner {
             col: 0,
             line: 1,
             keywords: map![
-                {S!("and"), TokenType::And},
-                {S!("class"), TokenType::Class},
-                {S!("else"), TokenType::Else},
-                {S!("false"), TokenType::False},
-                {S!("fun"), TokenType::Fun},
-                {S!("for"), TokenType::For},
-                {S!("if"), TokenType::If},
-                {S!("nil"), TokenType::Nil},
-                {S!("or"), TokenType::Or},
-                {S!("print"), TokenType::Print},
-                {S!("return"), TokenType::Return},
-                {S!("super"), TokenType::Super},
-                {S!("this"), TokenType::This},
-                {S!("true"), TokenType::True},
-                {S!("var"), TokenType::Var},
-                {S!("while"), TokenType::While},
-                {S!("eof"), TokenType::Eof}
+                { S!("and"), TokenType::And },
+                { S!("class"), TokenType::Class },
+                { S!("else"), TokenType::Else },
+                { S!("false"), TokenType::False },
+                { S!("fun"), TokenType::Fun },
+                { S!("for"), TokenType::For },
+                { S!("if"), TokenType::If },
+                { S!("nil"), TokenType::Nil },
+                { S!("or"), TokenType::Or },
+                { S!("print"), TokenType::Print },
+                { S!("return"), TokenType::Return },
+                { S!("super"), TokenType::Super },
+                { S!("this"), TokenType::This },
+                { S!("true"), TokenType::True },
+                { S!("var"), TokenType::Var },
+                { S!("while"), TokenType::While },
+                { S!("eof"), TokenType::Eof }
             ],
             lex_func: map![
                 { '{', Self::left_brace as Lexop },
@@ -105,7 +105,7 @@ impl Scanner {
                 } else if c.is_ascii_alphabetic() {
                     self.identifier()
                 } else {
-                    self.add_error("Unexpected character.".to_string())
+                    self.add_error(S!("Unexpected character."))
                 }
             }
         }
@@ -238,7 +238,7 @@ impl Scanner {
                 s.block_comment();
                 Ok(false)
             } else if s.peek(false).is_none() {
-                Err("Unterminated block comment.".to_string())
+                Err(S!("Unterminated block comment."))
             } else {
                 Ok(false)
             }
@@ -295,7 +295,7 @@ impl Scanner {
                 s.line += 1
             };
             if s.peek(true).is_none() && c != '"' {
-                Err("Unterminated string.".to_string())
+                Err(S!("Unterminated string."))
             } else {
                 // Advances past the second quote
                 Ok(s.advance_if('"'))
@@ -352,10 +352,10 @@ impl Scanner {
     }
 
     fn add_error(&mut self, message: String) {
-        let line = String::from_utf8(self.source.clone())
-            .unwrap_or("Invalid UTF8 chars in source.".to_string());
+        let line =
+            String::from_utf8(self.source.clone()).unwrap_or(S!("Invalid UTF8 chars in source."));
         self.errors.push(Error::new(
-            "Lexical Error: ".to_string() + &message,
+            S!("Lexical Error: ") + &message,
             line,
             self.line.clone(),
             self.col.clone(),
@@ -374,7 +374,7 @@ mod tests {
     #[test]
     fn test_peek() {
         let mut scanner = Scanner::default();
-        scanner.source = "123".to_string().into_bytes();
+        scanner.source = S!("123").into_bytes();
 
         assert_eq!('1', *scanner.peek(false).unwrap() as char);
         assert_eq!('1', *scanner.peek(false).unwrap() as char);
@@ -388,7 +388,7 @@ mod tests {
     #[test]
     fn test_advance_until() {
         let mut scanner = Scanner::default();
-        scanner.source = "123".to_string().into_bytes();
+        scanner.source = S!("123").into_bytes();
         // Should advance until the end of the string
         let _ = scanner.advance_until(|_s, c| if c.is_digit(10) { Ok(false) } else { Ok(true) });
         assert_eq!(scanner.advance(), None)
@@ -408,7 +408,7 @@ mod tests {
             TokenType::Semicolon,
             TokenType::Star,
         ];
-        let single_char_string = "\t() {},.-+; *\n".to_string();
+        let single_char_string = S!("\t() {},.-+; *\n");
         let single_char_tokens: Vec<Token> = scan_tokens(single_char_string)
             .expect("test_scan_single_char_tokens has an invalid single_char_string");
         for i in 0..tokens.len() {
@@ -425,7 +425,7 @@ mod tests {
             (TokenType::Dot, 0.0),
             (TokenType::Number, 3.0),
         ];
-        let literal_string = "12.3 12..3".to_string();
+        let literal_string = S!("12.3 12..3");
         let literal_tokens: Vec<Token> =
             scan_tokens(literal_string).expect("literal_string has an invalid literal");
         for i in 0..tokens.len() {
@@ -453,7 +453,7 @@ mod tests {
             (TokenType::String, "the \ncinema too\n"),
             (TokenType::Dot, ""),
         ];
-        let literal_string = "\"I\" \"waited\" var \"in\" and \"the \ncinema too\n\".".to_string();
+        let literal_string = S!("\"I\" \"waited\" var \"in\" and \"the \ncinema too\n\".");
         let literal_tokens: Vec<Token> =
             scan_tokens(literal_string).expect("literal_string has an invalid literal");
         for i in 0..tokens.len() {
@@ -463,7 +463,7 @@ mod tests {
                 literal_tokens[i]
                     .literal
                     .to_owned()
-                    .unwrap_or(Literal::String("".to_string()))
+                    .unwrap_or(Literal::String(S!("")))
                     .as_string()
                     .unwrap()
             )
@@ -494,7 +494,7 @@ mod tests {
             (TokenType::Identifier, "THIS"),
             (TokenType::Identifier, "Let"),
         ];
-        let literal_string = "and class else false fun for if nil or print return super this true var while eof test THIS Let".to_string();
+        let literal_string = S!("and class else false fun for if nil or print return super this true var while eof test THIS Let");
         let literal_tokens: Vec<Token> =
             scan_tokens(literal_string).expect("literal_string has an invalid literal");
         for i in 0..tokens.len() {
@@ -504,7 +504,7 @@ mod tests {
                 literal_tokens[i]
                     .literal
                     .to_owned()
-                    .unwrap_or(Literal::Identifier("".to_string()))
+                    .unwrap_or(Literal::Identifier(S!("")))
                     .as_identifier()
                     .unwrap()
             )
@@ -514,7 +514,7 @@ mod tests {
     #[test]
     fn test_advance_if() {
         let mut scanner = Scanner::default();
-        scanner.source = "123".to_string().into_bytes();
+        scanner.source = S!("123").into_bytes();
         assert_eq!(scanner.advance_if('1'), true);
         assert_eq!(scanner.advance_if('3'), false);
         assert_eq!(scanner.advance_if('2'), true);
@@ -531,7 +531,7 @@ mod tests {
             TokenType::LessEqual,
             TokenType::Greater,
         ];
-        let single_or_double_string = "\t! >= ==!= < <= >\n".to_string();
+        let single_or_double_string = S!("\t! >= ==!= < <= >\n");
         let single_or_double_tokens = scan_tokens(single_or_double_string).expect(
             "test_scan_single_or_double_char_tokens has an invalid single_or_double_string",
         );
@@ -543,20 +543,20 @@ mod tests {
     #[test]
     fn test_errors() {
         let error = Error {
-            message: "Lexical Error: Unexpected character.".to_string(),
-            text: "".to_string(),
+            message: S!("Lexical Error: Unexpected character."),
+            text: S!(""),
             line: 1,
             col: 1,
         };
 
         let error2 = Error {
-            message: "Lexical Error: Unterminated string.".to_string(),
-            text: "".to_string(),
+            message: S!("Lexical Error: Unterminated string."),
+            text: S!(""),
             line: 1,
             col: 7,
         };
 
-        let error_string = "~ \"test ".to_string();
+        let error_string = S!("~ \"test ");
         let errors = scan_tokens(error_string).unwrap_err();
         assert_eq!(error.message, errors[0].message);
         assert_eq!(error.line, errors[0].line);
