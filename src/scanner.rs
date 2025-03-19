@@ -2,6 +2,27 @@ use crate::error_fmt::Error;
 use crate::token::{Literal, Token, TokenType};
 use std::collections::hash_map::HashMap;
 
+#[macro_export]
+macro_rules! map {
+    ($({$k:expr, $v:expr}),*) => {
+        {
+            let mut m = HashMap::new();
+            $(
+                m.insert($k, $v);
+            )*
+            m
+        }
+    };
+}
+
+macro_rules! S {
+    ($s:expr) => {
+        $s.to_string()
+    };
+}
+
+type Scanop = fn(&mut Scanner);
+
 pub struct Scanner {
     source: Vec<u8>,
     start: usize,
@@ -10,7 +31,10 @@ pub struct Scanner {
     tokens: Vec<Token>,
     errors: Vec<Error>,
     keywords: HashMap<String, TokenType>,
+    lex_func: HashMap<char, Scanop>,
 }
+
+const DO_NOTHING: Scanop = |_s| {};
 
 impl Default for Scanner {
     fn default() -> Scanner {
@@ -21,28 +45,47 @@ impl Default for Scanner {
             start: 0,
             col: 0,
             line: 1,
-            keywords: vec![
-                ("and", TokenType::And),
-                ("class", TokenType::Class),
-                ("else", TokenType::Else),
-                ("false", TokenType::False),
-                ("fun", TokenType::Fun),
-                ("for", TokenType::For),
-                ("if", TokenType::If),
-                ("nil", TokenType::Nil),
-                ("or", TokenType::Or),
-                ("print", TokenType::Print),
-                ("return", TokenType::Return),
-                ("super", TokenType::Super),
-                ("this", TokenType::This),
-                ("true", TokenType::True),
-                ("var", TokenType::Var),
-                ("while", TokenType::While),
-                ("eof", TokenType::Eof),
-            ]
-            .into_iter()
-            .map(|(k, v)| (String::from(k), v))
-            .collect(),
+            keywords: map![
+                {S!("and"), TokenType::And},
+                {S!("class"), TokenType::Class},
+                {S!("else"), TokenType::Else},
+                {S!("false"), TokenType::False},
+                {S!("fun"), TokenType::Fun},
+                {S!("for"), TokenType::For},
+                {S!("if"), TokenType::If},
+                {S!("nil"), TokenType::Nil},
+                {S!("or"), TokenType::Or},
+                {S!("print"), TokenType::Print},
+                {S!("return"), TokenType::Return},
+                {S!("super"), TokenType::Super},
+                {S!("this"), TokenType::This},
+                {S!("true"), TokenType::True},
+                {S!("var"), TokenType::Var},
+                {S!("while"), TokenType::While},
+                {S!("eof"), TokenType::Eof}
+            ],
+            lex_func: map![
+                { '{', Self::left_brace as Scanop },
+                { '}', Self::right_brace as Scanop },
+                { '(', Self::left_paren as Scanop },
+                { ')', Self::right_paren as Scanop },
+                { ',', Self::comma as Scanop },
+                { '.', Self::dot as Scanop },
+                { '-', Self::minus as Scanop },
+                { '+', Self::plus as Scanop },
+                { ';', Self::semicolon as Scanop },
+                { '*', Self::star as Scanop },
+                { '"', Self::string as Scanop },
+                { ' ', |_s| { } },
+                { '\r', DO_NOTHING },
+                { '\t', DO_NOTHING },
+                { '\n', |s| { s.line += 1 } },
+                { '!', Self::bang as Scanop },
+                { '=', Self::equal as Scanop },
+                { '>', Self::greater as Scanop },
+                { '<', Self::lesser as Scanop },
+                { '/', Self::slash as Scanop }
+            ],
         }
     }
 }
@@ -61,6 +104,7 @@ impl Scanner {
     pub fn scan_tokens(&mut self, input: String) -> Vec<Token> {
         self.source = input.into_bytes();
 
+        // Scan one lexeme at a time until reaching end
         while !self.is_end() {
             self.start = self.col;
             self.scan_lexeme();
@@ -70,65 +114,9 @@ impl Scanner {
 
     fn scan_lexeme(&mut self) {
         let c = *self.advance().unwrap() as char;
-
-        match c {
-            '(' => self.add_token(TokenType::LeftParen),
-            ')' => self.add_token(TokenType::RightParen),
-            '{' => self.add_token(TokenType::LeftBrace),
-            '}' => self.add_token(TokenType::RightBrace),
-            ',' => self.add_token(TokenType::Comma),
-            '.' => self.add_token(TokenType::Dot),
-            '-' => self.add_token(TokenType::Minus),
-            '+' => self.add_token(TokenType::Plus),
-            ';' => self.add_token(TokenType::Semicolon),
-            '*' => self.add_token(TokenType::Star),
-            '"' => self.string(),
-            ' ' => {}
-            '\r' => {}
-            '\n' => self.line += 1,
-            '\t' => {}
-            '!' => {
-                let token = if self.advance_if('=') {
-                    TokenType::BangEqual
-                } else {
-                    TokenType::Bang
-                };
-                self.add_token(token)
-            }
-            '=' => {
-                let token = if self.advance_if('=') {
-                    TokenType::EqualEqual
-                } else {
-                    TokenType::Equal
-                };
-                self.add_token(token)
-            }
-            '>' => {
-                let token = if self.advance_if('=') {
-                    TokenType::GreaterEqual
-                } else {
-                    TokenType::Greater
-                };
-                self.add_token(token)
-            }
-            '<' => {
-                let token = if self.advance_if('=') {
-                    TokenType::LessEqual
-                } else {
-                    TokenType::Less
-                };
-                self.add_token(token)
-            }
-            '/' => {
-                if self.advance_if('/') {
-                    self.comment();
-                } else if self.advance_if('*') {
-                    self.block_comment();
-                } else {
-                    self.add_token(TokenType::Slash)
-                };
-            }
-            _ => {
+        match self.lex_func.get(&c) {
+            Some(fun) => fun(self),
+            None => {
                 if c.is_digit(10) {
                     self.number()
                 } else if c.is_ascii_alphabetic() {
@@ -138,6 +126,92 @@ impl Scanner {
                 }
             }
         }
+    }
+
+    fn right_brace(&mut self) {
+        self.add_token(TokenType::RightBrace);
+    }
+
+    fn left_brace(&mut self) {
+        self.add_token(TokenType::LeftBrace);
+    }
+
+    fn right_paren(&mut self) {
+        self.add_token(TokenType::RightParen)
+    }
+
+    fn left_paren(&mut self) {
+        self.add_token(TokenType::LeftParen)
+    }
+
+    fn comma(&mut self) {
+        self.add_token(TokenType::Comma)
+    }
+
+    fn dot(&mut self) {
+        self.add_token(TokenType::Dot)
+    }
+
+    fn minus(&mut self) {
+        self.add_token(TokenType::Minus)
+    }
+
+    fn plus(&mut self) {
+        self.add_token(TokenType::Plus)
+    }
+
+    fn semicolon(&mut self) {
+        self.add_token(TokenType::Semicolon)
+    }
+
+    fn star(&mut self) {
+        self.add_token(TokenType::Star)
+    }
+
+    fn bang(&mut self) {
+        let token = if self.advance_if('=') {
+            TokenType::BangEqual
+        } else {
+            TokenType::Bang
+        };
+        self.add_token(token)
+    }
+
+    fn equal(&mut self) {
+        let token = if self.advance_if('=') {
+            TokenType::EqualEqual
+        } else {
+            TokenType::Equal
+        };
+        self.add_token(token)
+    }
+
+    fn greater(&mut self) {
+        let token = if self.advance_if('=') {
+            TokenType::GreaterEqual
+        } else {
+            TokenType::Greater
+        };
+        self.add_token(token)
+    }
+
+    fn lesser(&mut self) {
+        let token = if self.advance_if('=') {
+            TokenType::LessEqual
+        } else {
+            TokenType::Less
+        };
+        self.add_token(token)
+    }
+
+    fn slash(&mut self) {
+        if self.advance_if('/') {
+            self.comment();
+        } else if self.advance_if('*') {
+            self.block_comment();
+        } else {
+            self.add_token(TokenType::Slash)
+        };
     }
 
     fn advance_until(
