@@ -1,27 +1,10 @@
 use crate::error_fmt::Error;
+use crate::map;
 use crate::token::{Literal, Token, TokenType};
+use crate::S;
 use std::collections::hash_map::HashMap;
 
-#[macro_export]
-macro_rules! map {
-    ($({$k:expr, $v:expr}),*) => {
-        {
-            let mut m = HashMap::new();
-            $(
-                m.insert($k, $v);
-            )*
-            m
-        }
-    };
-}
-
-macro_rules! S {
-    ($s:expr) => {
-        $s.to_string()
-    };
-}
-
-type Scanop = fn(&mut Scanner);
+type Lexop = fn(&mut Scanner);
 
 pub struct Scanner {
     source: Vec<u8>,
@@ -31,10 +14,10 @@ pub struct Scanner {
     tokens: Vec<Token>,
     errors: Vec<Error>,
     keywords: HashMap<String, TokenType>,
-    lex_func: HashMap<char, Scanop>,
+    lex_func: HashMap<char, Lexop>,
 }
 
-const DO_NOTHING: Scanop = |_s| {};
+const DO_NOTHING: Lexop = |_s| {};
 
 impl Default for Scanner {
     fn default() -> Scanner {
@@ -65,26 +48,26 @@ impl Default for Scanner {
                 {S!("eof"), TokenType::Eof}
             ],
             lex_func: map![
-                { '{', Self::left_brace as Scanop },
-                { '}', Self::right_brace as Scanop },
-                { '(', Self::left_paren as Scanop },
-                { ')', Self::right_paren as Scanop },
-                { ',', Self::comma as Scanop },
-                { '.', Self::dot as Scanop },
-                { '-', Self::minus as Scanop },
-                { '+', Self::plus as Scanop },
-                { ';', Self::semicolon as Scanop },
-                { '*', Self::star as Scanop },
-                { '"', Self::string as Scanop },
+                { '{', Self::left_brace as Lexop },
+                { '}', Self::right_brace as Lexop },
+                { '(', Self::left_paren as Lexop },
+                { ')', Self::right_paren as Lexop },
+                { ',', Self::comma as Lexop },
+                { '.', Self::dot as Lexop },
+                { '-', Self::minus as Lexop },
+                { '+', Self::plus as Lexop },
+                { ';', Self::semicolon as Lexop },
+                { '*', Self::star as Lexop },
+                { '"', Self::string as Lexop },
                 { ' ', |_s| { } },
                 { '\r', DO_NOTHING },
                 { '\t', DO_NOTHING },
                 { '\n', |s| { s.line += 1 } },
-                { '!', Self::bang as Scanop },
-                { '=', Self::equal as Scanop },
-                { '>', Self::greater as Scanop },
-                { '<', Self::lesser as Scanop },
-                { '/', Self::slash as Scanop }
+                { '!', Self::bang as Lexop },
+                { '=', Self::equal as Lexop },
+                { '>', Self::greater as Lexop },
+                { '<', Self::lesser as Lexop },
+                { '/', Self::slash as Lexop }
             ],
         }
     }

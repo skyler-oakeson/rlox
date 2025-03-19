@@ -6,6 +6,7 @@ use std::process::exit;
 mod error_fmt;
 mod scanner;
 mod token;
+mod utils;
 
 use scanner::scan_tokens;
 use token::Token;
