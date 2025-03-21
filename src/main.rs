@@ -27,13 +27,11 @@ pub fn parse_args(args: Vec<String>) {
     }
 }
 
-fn run_file(path: &str) {
-    match fs::read_to_string(path) {
-        Ok(s) => run(s),
-        Err(err) => {
-            println!("{:?}", err);
-            std::process::exit(-1)
-        }
+fn run(source: String) {
+    // Scanning phase
+    let tokens = scan_tokens(source);
+    for token in tokens {
+        println!("{}", token)
     }
 }
 
@@ -48,18 +46,12 @@ fn run_prompt() {
     }
 }
 
-fn run(source: String) {
-    // Scanning phase
-    let tokens: Vec<Token> = match scan_tokens(source) {
-        Ok(tokens) => tokens,
-        Err(errors) => {
-            error_fmt::report_errors(&errors);
-            println!("{0} Errors detected in scanning phase.", errors.len());
-            exit(-1)
+fn run_file(path: &str) {
+    match fs::read_to_string(path) {
+        Ok(s) => run(s),
+        Err(err) => {
+            println!("{:?}", err);
+            std::process::exit(-1)
         }
-    };
-
-    for token in tokens {
-        println!("{}", token)
     }
 }

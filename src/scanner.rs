@@ -1,3 +1,4 @@
+use crate::error_fmt::report_errors;
 use crate::error_fmt::Error;
 use crate::map;
 use crate::token::{Literal, Token, TokenType};
@@ -59,7 +60,7 @@ impl Default for Scanner {
                 { ';', Self::semicolon as Lexop },
                 { '*', Self::star as Lexop },
                 { '"', Self::string as Lexop },
-                { ' ', |_s| { } },
+                { ' ', DO_NOTHING },
                 { '\r', DO_NOTHING },
                 { '\t', DO_NOTHING },
                 { '\n', |s| { s.line += 1 } },
@@ -73,14 +74,13 @@ impl Default for Scanner {
     }
 }
 
-pub fn scan_tokens(input: String) -> Result<Vec<Token>, Vec<Error>> {
+pub fn scan_tokens(input: String) -> Vec<Token> {
     let mut scanner = Scanner::default();
     scanner.scan_tokens(input);
     if scanner.has_errors() {
-        Err(scanner.errors)
-    } else {
-        Ok(scanner.tokens)
+        report_errors(&scanner.errors);
     }
+    scanner.tokens
 }
 
 impl Scanner {
@@ -92,6 +92,7 @@ impl Scanner {
             self.start = self.col;
             self.scan_lexeme();
         }
+
         self.tokens.clone()
     }
 
@@ -109,6 +110,49 @@ impl Scanner {
                 }
             }
         }
+    }
+
+    fn advance_if(&mut self, expected: char) -> bool {
+        let did_match = match self.peek(false) {
+            Some(c) => *c as char == expected,
+            None => false,
+        };
+
+        if did_match {
+            self.advance();
+        };
+
+        did_match
+    }
+
+    fn advance(&mut self) -> Option<&u8> {
+        let c = self.source.get(self.col);
+        self.col += 1;
+        c
+    }
+
+    fn add_token(&mut self, token_type: TokenType) {
+        self.add_token_literal(token_type, None)
+    }
+
+    fn add_token_literal(&mut self, token_type: TokenType, literal: Option<Literal>) {
+        self.tokens
+            .push(Token::new(token_type, literal, self.line, self.col))
+    }
+
+    fn add_error(&mut self, message: String) {
+        let line =
+            String::from_utf8(self.source.clone()).unwrap_or(S!("Invalid UTF8 chars in source."));
+        self.errors.push(Error::new(
+            S!("Lexical Error: ") + &message,
+            S!(line),
+            self.line.clone(),
+            self.col.clone(),
+        ))
+    }
+
+    fn has_errors(&self) -> bool {
+        self.errors.len() != 0
     }
 
     fn right_brace(&mut self) {
@@ -322,49 +366,6 @@ impl Scanner {
     fn peek(&self, one_extra: bool) -> Option<&u8> {
         self.source.get(self.col + one_extra as usize)
     }
-
-    fn advance_if(&mut self, expected: char) -> bool {
-        let did_match = match self.peek(false) {
-            Some(c) => *c as char == expected,
-            None => false,
-        };
-
-        if did_match {
-            self.advance();
-        };
-
-        did_match
-    }
-
-    fn advance(&mut self) -> Option<&u8> {
-        let c = self.source.get(self.col);
-        self.col += 1;
-        c
-    }
-
-    fn add_token(&mut self, token_type: TokenType) {
-        self.add_token_literal(token_type, None)
-    }
-
-    fn add_token_literal(&mut self, token_type: TokenType, literal: Option<Literal>) {
-        self.tokens
-            .push(Token::new(token_type, literal, self.line, self.col))
-    }
-
-    fn add_error(&mut self, message: String) {
-        let line =
-            String::from_utf8(self.source.clone()).unwrap_or(S!("Invalid UTF8 chars in source."));
-        self.errors.push(Error::new(
-            S!("Lexical Error: ") + &message,
-            line,
-            self.line.clone(),
-            self.col.clone(),
-        ))
-    }
-
-    fn has_errors(&self) -> bool {
-        self.errors.len() != 0
-    }
 }
 
 #[cfg(test)]
@@ -409,8 +410,7 @@ mod tests {
             TokenType::Star,
         ];
         let single_char_string = S!("\t() {},.-+; *\n");
-        let single_char_tokens: Vec<Token> = scan_tokens(single_char_string)
-            .expect("test_scan_single_char_tokens has an invalid single_char_string");
+        let single_char_tokens: Vec<Token> = scan_tokens(single_char_string);
         for i in 0..tokens.len() {
             assert_eq!(tokens[i], single_char_tokens[i].token_type)
         }
@@ -426,8 +426,7 @@ mod tests {
             (TokenType::Number, 3.0),
         ];
         let literal_string = S!("12.3 12..3");
-        let literal_tokens: Vec<Token> =
-            scan_tokens(literal_string).expect("literal_string has an invalid literal");
+        let literal_tokens: Vec<Token> = scan_tokens(literal_string);
         for i in 0..tokens.len() {
             assert_eq!(tokens[i].0, literal_tokens[i].token_type);
             assert_eq!(
@@ -454,8 +453,7 @@ mod tests {
             (TokenType::Dot, ""),
         ];
         let literal_string = S!("\"I\" \"waited\" var \"in\" and \"the \ncinema too\n\".");
-        let literal_tokens: Vec<Token> =
-            scan_tokens(literal_string).expect("literal_string has an invalid literal");
+        let literal_tokens: Vec<Token> = scan_tokens(literal_string);
         for i in 0..tokens.len() {
             assert_eq!(tokens[i].0, literal_tokens[i].token_type);
             assert_eq!(
@@ -495,8 +493,7 @@ mod tests {
             (TokenType::Identifier, "Let"),
         ];
         let literal_string = S!("and class else false fun for if nil or print return super this true var while eof test THIS Let");
-        let literal_tokens: Vec<Token> =
-            scan_tokens(literal_string).expect("literal_string has an invalid literal");
+        let literal_tokens: Vec<Token> = scan_tokens(literal_string);
         for i in 0..tokens.len() {
             assert_eq!(tokens[i].0, literal_tokens[i].token_type);
             assert_eq!(
@@ -532,9 +529,7 @@ mod tests {
             TokenType::Greater,
         ];
         let single_or_double_string = S!("\t! >= ==!= < <= >\n");
-        let single_or_double_tokens = scan_tokens(single_or_double_string).expect(
-            "test_scan_single_or_double_char_tokens has an invalid single_or_double_string",
-        );
+        let single_or_double_tokens = scan_tokens(single_or_double_string);
         for i in 0..tokens.len() {
             assert_eq!(tokens[i], single_or_double_tokens[i].token_type)
         }
@@ -557,12 +552,13 @@ mod tests {
         };
 
         let error_string = S!("~ \"test ");
-        let errors = scan_tokens(error_string).unwrap_err();
-        assert_eq!(error.message, errors[0].message);
-        assert_eq!(error.line, errors[0].line);
-        assert_eq!(error.col, errors[0].col);
-        assert_eq!(error2.message, errors[1].message);
-        assert_eq!(error2.line, errors[1].line);
-        assert_eq!(error2.col, errors[1].col);
+        let mut scanner = Scanner::default();
+        scanner.scan_tokens(error_string);
+        assert_eq!(error.message, scanner.errors[0].message);
+        assert_eq!(error.line, scanner.errors[0].line);
+        assert_eq!(error.col, scanner.errors[0].col);
+        assert_eq!(error2.message, scanner.errors[1].message);
+        assert_eq!(error2.line, scanner.errors[1].line);
+        assert_eq!(error2.col, scanner.errors[1].col);
     }
 }

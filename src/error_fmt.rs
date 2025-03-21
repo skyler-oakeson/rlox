@@ -36,6 +36,6 @@ impl Display for Error {
 
 pub fn report_errors(errors: &Vec<Error>) {
     for error in errors {
-        println!("{}", error)
+        print!("{}", error)
     }
 }
