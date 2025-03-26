@@ -136,8 +136,17 @@ impl Scanner {
     }
 
     fn add_token_literal(&mut self, token_type: TokenType, literal: Option<Literal>) {
+        let lexeme = match token_type {
+            TokenType::String | TokenType::Number | TokenType::Identifier => {
+                literal.clone().unwrap().to_string()
+            }
+            _ => String::from_utf8(Vec::from_iter(
+                self.source[self.start..self.col].iter().cloned(),
+            ))
+            .unwrap(),
+        };
         self.tokens
-            .push(Token::new(token_type, literal, self.line, self.col))
+            .push(Token::new(token_type, lexeme, literal, self.line, self.col))
     }
 
     fn add_error(&mut self, message: String) {

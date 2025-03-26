@@ -1,4 +1,4 @@
-use std::fmt;
+use std::fmt::Display;
 
 #[allow(dead_code)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -51,12 +51,6 @@ pub enum TokenType {
     Eof,
 }
 
-impl fmt::Display for TokenType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.to_string())
-    }
-}
-
 macro_rules! as_variant {
     ($value:expr, $variant:path) => {
         match $value {
@@ -87,18 +81,36 @@ impl Literal {
     }
 }
 
+impl Display for Literal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Literal::Number(val) => write!(f, "{}", val),
+            Literal::Identifier(val) => write!(f, "{}", val),
+            Literal::String(val) => write!(f, "{}", val),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Token {
     pub token_type: TokenType,
+    pub lexeme: String,
     pub line: usize,
     pub col: usize,
     pub literal: Option<Literal>,
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, literal: Option<Literal>, line: usize, col: usize) -> Self {
+    pub fn new(
+        token_type: TokenType,
+        lexeme: String,
+        literal: Option<Literal>,
+        line: usize,
+        col: usize,
+    ) -> Self {
         Token {
             token_type,
+            lexeme,
             literal,
             col,
             line,
@@ -106,12 +118,8 @@ impl Token {
     }
 }
 
-impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Token: {:?} {:?} {:?} {:?}",
-            self.line, self.col, self.token_type, self.literal
-        )
+impl Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.lexeme)
     }
 }

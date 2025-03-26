@@ -4,10 +4,13 @@ use std::io::{stdin, stdout, Write};
 use std::process::exit;
 
 mod error_fmt;
+mod expression;
+mod parser;
 mod scanner;
 mod token;
 mod utils;
 
+use parser::parse;
 use scanner::scan_tokens;
 use token::Token;
 
@@ -31,7 +34,7 @@ fn run(source: String) {
     // Scanning phase
     let tokens = scan_tokens(source);
     for token in tokens {
-        println!("{}", token)
+        println!("{:?}", token)
     }
 }
 
@@ -50,7 +53,7 @@ fn run_file(path: &str) {
     match fs::read_to_string(path) {
         Ok(s) => run(s),
         Err(err) => {
-            println!("{:?}", err);
+            println!("{}", err.to_string());
             std::process::exit(-1)
         }
     }
