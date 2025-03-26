@@ -8,14 +8,14 @@ use std::collections::hash_map::HashMap;
 type Lexop = fn(&mut Scanner);
 
 pub struct Scanner {
-    source: Vec<u8>,
-    start: usize,
     col: usize,
-    line: usize,
-    tokens: Vec<Token>,
     errors: Vec<Error>,
     keywords: HashMap<String, TokenType>,
     lex_func: HashMap<char, Lexop>,
+    line: usize,
+    start: usize,
+    source: Vec<u8>,
+    tokens: Vec<Token>,
 }
 
 const DO_NOTHING: Lexop = |_s| {};
@@ -84,51 +84,15 @@ pub fn scan_tokens(input: String) -> Vec<Token> {
 }
 
 impl Scanner {
-    pub fn scan_tokens(&mut self, input: String) -> Vec<Token> {
-        self.source = input.into_bytes();
-
-        // Scan one lexeme at a time until reaching end
-        while !self.is_end() {
-            self.start = self.col;
-            self.scan_lexeme();
-        }
-
-        self.tokens.clone()
-    }
-
-    fn scan_lexeme(&mut self) {
-        let c = *self.advance().unwrap() as char;
-        match self.lex_func.get(&c) {
-            Some(fun) => fun(self),
-            None => {
-                if c.is_digit(10) {
-                    self.number()
-                } else if c.is_ascii_alphabetic() {
-                    self.identifier()
-                } else {
-                    self.add_error(S!("Unexpected character."))
-                }
-            }
-        }
-    }
-
-    fn advance_if(&mut self, expected: char) -> bool {
-        let did_match = match self.peek(false) {
-            Some(c) => *c as char == expected,
-            None => false,
-        };
-
-        if did_match {
-            self.advance();
-        };
-
-        did_match
-    }
-
-    fn advance(&mut self) -> Option<&u8> {
-        let c = self.source.get(self.col);
-        self.col += 1;
-        c
+    fn add_error(&mut self, message: String) {
+        let line =
+            String::from_utf8(self.source.clone()).unwrap_or(S!("Invalid UTF8 chars in source."));
+        self.errors.push(Error::new(
+            S!("Lexical Error: ") + &message,
+            S!(line),
+            self.line.clone(),
+            self.col.clone(),
+        ))
     }
 
     fn add_token(&mut self, token_type: TokenType) {
@@ -149,105 +113,23 @@ impl Scanner {
             .push(Token::new(token_type, lexeme, literal, self.line, self.col))
     }
 
-    fn add_error(&mut self, message: String) {
-        let line =
-            String::from_utf8(self.source.clone()).unwrap_or(S!("Invalid UTF8 chars in source."));
-        self.errors.push(Error::new(
-            S!("Lexical Error: ") + &message,
-            S!(line),
-            self.line.clone(),
-            self.col.clone(),
-        ))
+    fn advance(&mut self) -> Option<&u8> {
+        let c = self.source.get(self.col);
+        self.col += 1;
+        c
     }
 
-    fn has_errors(&self) -> bool {
-        self.errors.len() != 0
-    }
-
-    fn right_brace(&mut self) {
-        self.add_token(TokenType::RightBrace);
-    }
-
-    fn left_brace(&mut self) {
-        self.add_token(TokenType::LeftBrace);
-    }
-
-    fn right_paren(&mut self) {
-        self.add_token(TokenType::RightParen)
-    }
-
-    fn left_paren(&mut self) {
-        self.add_token(TokenType::LeftParen)
-    }
-
-    fn comma(&mut self) {
-        self.add_token(TokenType::Comma)
-    }
-
-    fn dot(&mut self) {
-        self.add_token(TokenType::Dot)
-    }
-
-    fn minus(&mut self) {
-        self.add_token(TokenType::Minus)
-    }
-
-    fn plus(&mut self) {
-        self.add_token(TokenType::Plus)
-    }
-
-    fn semicolon(&mut self) {
-        self.add_token(TokenType::Semicolon)
-    }
-
-    fn star(&mut self) {
-        self.add_token(TokenType::Star)
-    }
-
-    fn bang(&mut self) {
-        let token = if self.advance_if('=') {
-            TokenType::BangEqual
-        } else {
-            TokenType::Bang
+    fn advance_if(&mut self, expected: char) -> bool {
+        let did_match = match self.peek(false) {
+            Some(c) => *c as char == expected,
+            None => false,
         };
-        self.add_token(token)
-    }
 
-    fn equal(&mut self) {
-        let token = if self.advance_if('=') {
-            TokenType::EqualEqual
-        } else {
-            TokenType::Equal
+        if did_match {
+            self.advance();
         };
-        self.add_token(token)
-    }
 
-    fn greater(&mut self) {
-        let token = if self.advance_if('=') {
-            TokenType::GreaterEqual
-        } else {
-            TokenType::Greater
-        };
-        self.add_token(token)
-    }
-
-    fn lesser(&mut self) {
-        let token = if self.advance_if('=') {
-            TokenType::LessEqual
-        } else {
-            TokenType::Less
-        };
-        self.add_token(token)
-    }
-
-    fn slash(&mut self) {
-        if self.advance_if('/') {
-            self.comment();
-        } else if self.advance_if('*') {
-            self.block_comment();
-        } else {
-            self.add_token(TokenType::Slash)
-        };
+        did_match
     }
 
     fn advance_until(
@@ -266,15 +148,13 @@ impl Scanner {
         Ok(())
     }
 
-    fn comment(&mut self) {
-        let _ = self.advance_until(|s, c| {
-            if c == '\n' {
-                s.line += 1;
-                Ok(true)
-            } else {
-                Ok(false)
-            }
-        });
+    fn bang(&mut self) {
+        let token = if self.advance_if('=') {
+            TokenType::BangEqual
+        } else {
+            TokenType::Bang
+        };
+        self.add_token(token)
     }
 
     fn block_comment(&mut self) {
@@ -299,6 +179,88 @@ impl Scanner {
         if res.is_err() {
             self.add_error(res.unwrap_err())
         }
+    }
+
+    fn comma(&mut self) {
+        self.add_token(TokenType::Comma)
+    }
+
+    fn comment(&mut self) {
+        let _ = self.advance_until(|s, c| {
+            if c == '\n' {
+                s.line += 1;
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        });
+    }
+
+    fn dot(&mut self) {
+        self.add_token(TokenType::Dot)
+    }
+
+    fn equal(&mut self) {
+        let token = if self.advance_if('=') {
+            TokenType::EqualEqual
+        } else {
+            TokenType::Equal
+        };
+        self.add_token(token)
+    }
+
+    fn greater(&mut self) {
+        let token = if self.advance_if('=') {
+            TokenType::GreaterEqual
+        } else {
+            TokenType::Greater
+        };
+        self.add_token(token)
+    }
+
+    fn has_errors(&self) -> bool {
+        self.errors.len() != 0
+    }
+
+    fn identifier(&mut self) {
+        let _ = self.advance_until(|_, c| Ok(!c.is_alphanumeric()));
+
+        let identifier = String::from_utf8(Vec::from_iter(
+            self.source[self.start..self.col].iter().cloned(),
+        ))
+        .unwrap();
+
+        match self.keywords.get(&identifier) {
+            Some(tt) => self.add_token(tt.clone()),
+            None => {
+                self.add_token_literal(TokenType::Identifier, Some(Literal::Identifier(identifier)))
+            }
+        };
+    }
+
+    fn is_end(&self) -> bool {
+        self.col >= self.source.len()
+    }
+
+    fn left_brace(&mut self) {
+        self.add_token(TokenType::LeftBrace);
+    }
+
+    fn left_paren(&mut self) {
+        self.add_token(TokenType::LeftParen)
+    }
+
+    fn lesser(&mut self) {
+        let token = if self.advance_if('=') {
+            TokenType::LessEqual
+        } else {
+            TokenType::Less
+        };
+        self.add_token(token)
+    }
+
+    fn minus(&mut self) {
+        self.add_token(TokenType::Minus)
     }
 
     fn number(&mut self) {
@@ -326,20 +288,66 @@ impl Scanner {
         self.add_token_literal(TokenType::Number, Some(Literal::Number(num)))
     }
 
-    fn identifier(&mut self) {
-        let _ = self.advance_until(|_, c| Ok(!c.is_alphanumeric()));
+    fn peek(&self, one_extra: bool) -> Option<&u8> {
+        self.source.get(self.col + one_extra as usize)
+    }
 
-        let identifier = String::from_utf8(Vec::from_iter(
-            self.source[self.start..self.col].iter().cloned(),
-        ))
-        .unwrap();
+    fn plus(&mut self) {
+        self.add_token(TokenType::Plus)
+    }
 
-        match self.keywords.get(&identifier) {
-            Some(tt) => self.add_token(tt.clone()),
+    fn right_brace(&mut self) {
+        self.add_token(TokenType::RightBrace);
+    }
+
+    fn right_paren(&mut self) {
+        self.add_token(TokenType::RightParen)
+    }
+
+    fn scan_lexeme(&mut self) {
+        let c = *self.advance().unwrap() as char;
+        match self.lex_func.get(&c) {
+            Some(fun) => fun(self),
             None => {
-                self.add_token_literal(TokenType::Identifier, Some(Literal::Identifier(identifier)))
+                if c.is_digit(10) {
+                    self.number()
+                } else if c.is_ascii_alphabetic() {
+                    self.identifier()
+                } else {
+                    self.add_error(S!("Unexpected character."))
+                }
             }
+        }
+    }
+
+    pub fn scan_tokens(&mut self, input: String) -> Vec<Token> {
+        self.source = input.into_bytes();
+
+        // Scan one lexeme at a time until reaching end
+        while !self.is_end() {
+            self.start = self.col;
+            self.scan_lexeme();
+        }
+
+        self.tokens.clone()
+    }
+
+    fn semicolon(&mut self) {
+        self.add_token(TokenType::Semicolon)
+    }
+
+    fn slash(&mut self) {
+        if self.advance_if('/') {
+            self.comment();
+        } else if self.advance_if('*') {
+            self.block_comment();
+        } else {
+            self.add_token(TokenType::Slash)
         };
+    }
+
+    fn star(&mut self) {
+        self.add_token(TokenType::Star)
     }
 
     fn string(&mut self) {
@@ -366,14 +374,6 @@ impl Scanner {
                 self.add_token_literal(TokenType::String, Some(Literal::String(string)));
             }
         }
-    }
-
-    fn is_end(&self) -> bool {
-        self.col >= self.source.len()
-    }
-
-    fn peek(&self, one_extra: bool) -> Option<&u8> {
-        self.source.get(self.col + one_extra as usize)
     }
 }
 
