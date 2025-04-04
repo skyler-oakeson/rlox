@@ -6,6 +6,7 @@ use crate::S;
 use std::collections::hash_map::HashMap;
 
 type Lexop = fn(&mut Scanner);
+const DO_NOTHING: Lexop = |_s| {};
 
 pub struct Scanner {
     col: usize,
@@ -17,8 +18,6 @@ pub struct Scanner {
     source: Vec<u8>,
     tokens: Vec<Token>,
 }
-
-const DO_NOTHING: Lexop = |_s| {};
 
 impl Default for Scanner {
     fn default() -> Scanner {

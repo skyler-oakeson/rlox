@@ -1,4 +1,5 @@
 use crate::token::{Literal, Token};
+use std::any::Any;
 use std::fmt::Display;
 
 pub trait Expr: Display {}
@@ -25,13 +26,13 @@ impl Display for Grp {
 }
 
 pub struct Lit {
-    pub value: Option<Literal>,
+    pub value: Option<Box<dyn Any>>,
 }
 impl Expr for Lit {}
 impl Display for Lit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.value {
-            Some(val) => write!(f, "{}", val),
+            Some(val) => write!(f, "{:?}", val),
             None => write!(f, "nil"),
         }
     }
