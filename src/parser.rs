@@ -52,14 +52,13 @@ impl Parser {
 
     fn comparison(&mut self) -> Box<dyn Expr> {
         let mut expr: Box<dyn Expr> = self.term();
-        let matches = vec![
-            TokenType::Greater,
-            TokenType::GreaterEqual,
-            TokenType::LessEqual,
-            TokenType::Less,
-        ];
 
-        while let Some(op) = self.tokens.advance_if(|t| matches.contains(&t.token_type)) {
+        while let Some(op) = self.tokens.advance_if(|t| {
+            t.token_type == TokenType::Greater
+                || t.token_type == TokenType::GreaterEqual
+                || t.token_type == TokenType::LessEqual
+                || t.token_type == TokenType::Less
+        }) {
             expr = Box::new(Bin {
                 left: expr,
                 operator: op.clone(),
@@ -71,8 +70,10 @@ impl Parser {
 
     fn term(&mut self) -> Box<dyn Expr> {
         let mut expr: Box<dyn Expr> = self.factor();
-        let matches = vec![TokenType::Plus, TokenType::Minus];
-        while let Some(op) = self.tokens.advance_if(|t| matches.contains(&t.token_type)) {
+        while let Some(op) = self
+            .tokens
+            .advance_if(|t| t.token_type == TokenType::Plus || t.token_type == TokenType::Minus)
+        {
             expr = Box::new(Bin {
                 left: expr,
                 operator: op.clone(),
@@ -84,8 +85,10 @@ impl Parser {
 
     fn factor(&mut self) -> Box<dyn Expr> {
         let mut expr: Box<dyn Expr> = self.unary();
-        let matches = vec![TokenType::Slash, TokenType::Star];
-        while let Some(op) = self.tokens.advance_if(|t| matches.contains(&t.token_type)) {
+        while let Some(op) = self
+            .tokens
+            .advance_if(|t| t.token_type == TokenType::Slash || t.token_type == TokenType::Star)
+        {
             expr = Box::new(Bin {
                 left: expr,
                 operator: op.clone(),
@@ -96,8 +99,10 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Box<dyn Expr> {
-        let matches = vec![TokenType::Bang, TokenType::Minus];
-        if let Some(op) = self.tokens.advance_if(|t| matches.contains(&t.token_type)) {
+        if let Some(op) = self
+            .tokens
+            .advance_if(|t| t.token_type == TokenType::Bang || t.token_type == TokenType::Minus)
+        {
             let expr = Box::new(Un {
                 operator: op.clone(),
                 right: self.unary(),
