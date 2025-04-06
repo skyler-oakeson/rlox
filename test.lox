@@ -1,6 +1,4 @@
-// this is a test
-var link = "Test";
-/*
+/* 
 Do the
     /*
     inner
@@ -8,14 +6,3 @@ Do the
     */
 block comments work?
 */
-if link == "Test" {
-    print "true"
-}
-
-?
-
-"test
-
-this
-"
-

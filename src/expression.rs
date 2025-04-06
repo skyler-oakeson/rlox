@@ -1,6 +1,9 @@
 use crate::token::{Literal, Token};
 use std::any::Any;
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
+
+pub trait AnyDebug: Any + Debug {}
+impl<T> AnyDebug for T where T: Any + Debug {}
 
 pub trait Expr: Display {}
 pub struct Bin {
@@ -26,7 +29,7 @@ impl Display for Grp {
 }
 
 pub struct Lit {
-    pub value: Option<Box<dyn Any>>,
+    pub value: Option<Box<dyn AnyDebug>>,
 }
 impl Expr for Lit {}
 impl Display for Lit {

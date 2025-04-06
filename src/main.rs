@@ -5,14 +5,15 @@ use std::process::exit;
 
 mod error_fmt;
 mod expression;
+mod marcher;
 mod parser;
 mod scanner;
 mod token;
 mod utils;
 
 use parser::parse;
-use scanner::scan_tokens;
-use token::Token;
+//use scanner::Scanner;
+//use token::Token;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -32,10 +33,11 @@ pub fn parse_args(args: Vec<String>) {
 
 fn run(source: String) {
     // Scanning phase
-    let tokens = scan_tokens(source);
-    for token in tokens {
-        println!("{:?}", token)
-    }
+    let mut scanner = scanner::Scanner::default();
+    let tokens = scanner.scan_tokens(source);
+    println!("{:?}", tokens);
+    let expr = parser::parse(tokens);
+    println!("{}", expr)
 }
 
 fn run_prompt() {
@@ -56,13 +58,5 @@ fn run_file(path: &str) {
             println!("{}", err.to_string());
             std::process::exit(-1)
         }
-    }
-}
-
-fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {
-    if x.len() > y.len() {
-        x
-    } else {
-        y
     }
 }

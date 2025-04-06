@@ -1,4 +1,5 @@
 use crate::expression::{Bin, Expr, Grp, Lit, Un};
+use crate::marcher::Marcher;
 use crate::token::{Literal, Token, TokenType};
 
 /*                    Grammer for lox
@@ -14,53 +15,17 @@ use crate::token::{Literal, Token, TokenType};
  *             | "(" expression ")";
  */
 
-pub struct Marcher<T> {
-    values: Vec<T>,
-    curr: i32,
-}
-
-impl<T> Marcher<T>
-where
-    T: PartialEq,
-{
-    fn new(values: Vec<T>) -> Self {
-        Marcher { values, curr: -1 }
-    }
-
-    fn advance(&mut self, ahead: u32) -> Option<&T> {
-        let t = self.values.get((self.curr + (ahead) as i32) as usize);
-        if t.is_some() {
-            self.curr += ahead as i32
-        }
-        t
-    }
-
-    fn previous(&self, behind: u32) -> Option<&T> {
-        self.values.get((self.curr - behind as i32) as usize)
-    }
-
-    fn peek(&self, ahead: u32) -> Option<&T> {
-        self.values.get((self.curr + ahead as i32) as usize)
-    }
-
-    fn advance_if(&mut self, predicate: impl FnOnce(&T) -> bool) -> bool {
-        let t = match self.peek(1) {
-            Some(val) => val,
-            None => return false,
-        };
-
-        let res = predicate(t);
-        res.then(|| self.advance(1));
-        res
-    }
-}
-
-struct Parser {
+pub struct Parser {
     tokens: Marcher<Token>,
 }
 
+pub fn parse(tokens: Vec<Token>) -> Box<dyn Expr> {
+    let mut parser = Parser::new(tokens);
+    parser.expression()
+}
+
 impl Parser {
-    fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<Token>) -> Self {
         Parser {
             tokens: Marcher::new(tokens),
         }
@@ -72,13 +37,12 @@ impl Parser {
 
     fn equality(&mut self) -> Box<dyn Expr> {
         let mut expr: Box<dyn Expr> = self.comparison();
-        while self.tokens.advance_if(|t| {
+        while let Some(op) = self.tokens.advance_if(|t| {
             t.token_type == TokenType::BangEqual || t.token_type == TokenType::EqualEqual
         }) {
-            let op = self.tokens.previous(1);
             expr = Box::new(Bin {
                 left: expr,
-                operator: op.unwrap().clone(),
+                operator: op.clone(),
                 right: self.comparison(),
             })
         }
@@ -95,11 +59,10 @@ impl Parser {
             TokenType::Less,
         ];
 
-        while self.tokens.advance_if(|t| matches.contains(&t.token_type)) {
-            let op = self.tokens.previous(1);
+        while let Some(op) = self.tokens.advance_if(|t| matches.contains(&t.token_type)) {
             expr = Box::new(Bin {
                 left: expr,
-                operator: op.unwrap().clone(),
+                operator: op.clone(),
                 right: self.term(),
             })
         }
@@ -109,11 +72,10 @@ impl Parser {
     fn term(&mut self) -> Box<dyn Expr> {
         let mut expr: Box<dyn Expr> = self.factor();
         let matches = vec![TokenType::Plus, TokenType::Minus];
-        while self.tokens.advance_if(|t| matches.contains(&t.token_type)) {
-            let op = self.tokens.previous(1);
+        while let Some(op) = self.tokens.advance_if(|t| matches.contains(&t.token_type)) {
             expr = Box::new(Bin {
                 left: expr,
-                operator: op.unwrap().clone(),
+                operator: op.clone(),
                 right: self.factor(),
             })
         }
@@ -123,11 +85,10 @@ impl Parser {
     fn factor(&mut self) -> Box<dyn Expr> {
         let mut expr: Box<dyn Expr> = self.unary();
         let matches = vec![TokenType::Slash, TokenType::Star];
-        while self.tokens.advance_if(|t| matches.contains(&t.token_type)) {
-            let op = self.tokens.previous(1);
+        while let Some(op) = self.tokens.advance_if(|t| matches.contains(&t.token_type)) {
             expr = Box::new(Bin {
                 left: expr,
-                operator: op.unwrap().clone(),
+                operator: op.clone(),
                 right: self.unary(),
             });
         }
@@ -136,10 +97,9 @@ impl Parser {
 
     fn unary(&mut self) -> Box<dyn Expr> {
         let matches = vec![TokenType::Bang, TokenType::Minus];
-        if self.tokens.advance_if(|t| matches.contains(&t.token_type)) {
-            let op = self.tokens.previous(1);
+        if let Some(op) = self.tokens.advance_if(|t| matches.contains(&t.token_type)) {
             let expr = Box::new(Un {
-                operator: op.unwrap().clone(),
+                operator: op.clone(),
                 right: self.unary(),
             });
             return expr;
@@ -149,51 +109,49 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Box<dyn Expr> {
-        let mut expr = Box::new(Lit { value: None });
+        let mut lit = Box::new(Lit { value: None });
 
-        if self.tokens.advance_if(|t| t.token_type == TokenType::False) {
-            return Box::new(Lit {
-                value: Some(Box::new(false)),
-            });
+        if let Some(_tok) = self.tokens.advance_if(|t| t.token_type == TokenType::False) {
+            lit.value = Some(Box::new(false));
+            return lit;
         }
 
-        if self.tokens.advance_if(|t| t.token_type == TokenType::True) {
-            return Box::new(Lit {
-                value: Some(Box::new(true)),
-            });
+        if let Some(_tok) = self.tokens.advance_if(|t| t.token_type == TokenType::True) {
+            lit.value = Some(Box::new(true));
+            return lit;
         }
 
-        if self.tokens.advance_if(|t| t.token_type == TokenType::Nil) {
-            return Box::new(Lit { value: None });
+        if let Some(_tok) = self.tokens.advance_if(|t| t.token_type == TokenType::Nil) {
+            lit.value = None;
+            return lit;
         }
 
-        self.tokens.advance_if(|t| {
-            let mut res = false;
-            if t.token_type == TokenType::String {
-                expr = Box::new(Lit {
-                    value: Some(Box::new(t.literal.clone().unwrap().as_string())),
-                });
-                res = true;
-            };
+        if let Some(tok) = self
+            .tokens
+            .advance_if(|t| t.token_type == TokenType::String)
+        {
+            lit.value = Some(Box::new(tok.literal.clone().unwrap().as_string()));
+            return lit;
+        }
 
-            if t.token_type == TokenType::Number {
-                expr = Box::new(Lit {
-                    value: Some(Box::new(t.literal.clone().unwrap().as_number())),
-                });
-                res = true;
-            };
-            res
-        });
+        if let Some(tok) = self
+            .tokens
+            .advance_if(|t| t.token_type == TokenType::Number)
+        {
+            lit.value = Some(Box::new(tok.literal.clone().unwrap().as_number()));
+            return lit;
+        }
 
-        if self
+        if let Some(_tok) = self
             .tokens
             .advance_if(|t| t.token_type == TokenType::LeftParen)
         {
-            return Box::new(Grp {
+            let grp = Box::new(Grp {
                 expression: self.expression(),
             });
+            return grp;
         };
 
-        expr
+        lit
     }
 }
