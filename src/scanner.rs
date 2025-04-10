@@ -67,15 +67,17 @@ impl Default for Scanner {
                 { '=', Self::equal as Lexop },
                 { '>', Self::greater as Lexop },
                 { '<', Self::lesser as Lexop },
-                { '/', Self::slash as Lexop }
+                { '/', Self::slash as Lexop },
+                { '?', Self::question as Lexop },
+                { ':', Self::colon as Lexop }
             ],
         }
     }
 }
 
-pub fn scan_tokens(input: String) -> Vec<Token> {
+pub fn scan_tokens(input: &String) -> Vec<Token> {
     let mut scanner = Scanner::default();
-    scanner.scan_tokens(input);
+    scanner.scan_tokens(input.clone());
     if scanner.has_errors() {
         report_errors(&scanner.errors);
     }
@@ -178,6 +180,10 @@ impl Scanner {
         if res.is_err() {
             self.add_error(res.unwrap_err())
         }
+    }
+
+    fn colon(&mut self) {
+        self.add_token(TokenType::Colon)
     }
 
     fn comma(&mut self) {
@@ -374,6 +380,10 @@ impl Scanner {
             }
         }
     }
+
+    fn question(&mut self) {
+        self.add_token(TokenType::Question)
+    }
 }
 
 #[cfg(test)]
@@ -418,7 +428,7 @@ mod tests {
             TokenType::Star,
         ];
         let single_char_string = S!("\t() {},.-+; *\n");
-        let single_char_tokens: Vec<Token> = scan_tokens(single_char_string);
+        let single_char_tokens: Vec<Token> = scan_tokens(&single_char_string);
         for i in 0..tokens.len() {
             assert_eq!(tokens[i], single_char_tokens[i].token_type)
         }
@@ -434,7 +444,7 @@ mod tests {
             (TokenType::Number, 3.0),
         ];
         let literal_string = S!("12.3 12..3");
-        let literal_tokens: Vec<Token> = scan_tokens(literal_string);
+        let literal_tokens: Vec<Token> = scan_tokens(&literal_string);
         for i in 0..tokens.len() {
             assert_eq!(tokens[i].0, literal_tokens[i].token_type);
             assert_eq!(
@@ -461,7 +471,7 @@ mod tests {
             (TokenType::Dot, ""),
         ];
         let literal_string = S!("\"I\" \"waited\" var \"in\" and \"the \ncinema too\n\".");
-        let literal_tokens: Vec<Token> = scan_tokens(literal_string);
+        let literal_tokens: Vec<Token> = scan_tokens(&literal_string);
         for i in 0..tokens.len() {
             assert_eq!(tokens[i].0, literal_tokens[i].token_type);
             assert_eq!(
@@ -501,7 +511,7 @@ mod tests {
             (TokenType::Identifier, "Let"),
         ];
         let literal_string = S!("and class else false fun for if nil or print return super this true var while eof test THIS Let");
-        let literal_tokens: Vec<Token> = scan_tokens(literal_string);
+        let literal_tokens: Vec<Token> = scan_tokens(&literal_string);
         for i in 0..tokens.len() {
             assert_eq!(tokens[i].0, literal_tokens[i].token_type);
             assert_eq!(
@@ -537,7 +547,7 @@ mod tests {
             TokenType::Greater,
         ];
         let single_or_double_string = S!("\t! >= ==!= < <= >\n");
-        let single_or_double_tokens = scan_tokens(single_or_double_string);
+        let single_or_double_tokens = scan_tokens(&single_or_double_string);
         for i in 0..tokens.len() {
             assert_eq!(tokens[i], single_or_double_tokens[i].token_type)
         }

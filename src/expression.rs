@@ -1,4 +1,4 @@
-use crate::token::{Literal, Token};
+use crate::token::Token;
 use std::any::Any;
 use std::fmt::{Debug, Display};
 
@@ -15,6 +15,18 @@ impl Expr for Bin {}
 impl Display for Bin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({} {} {})", self.operator, self.left, self.right)
+    }
+}
+
+pub struct Cond {
+    pub cond: Box<dyn Expr>,
+    pub cons: Box<dyn Expr>,
+    pub alt: Box<dyn Expr>,
+}
+impl Expr for Cond {}
+impl Display for Cond {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({} ? {} : {})", self.cond, self.cons, self.alt)
     }
 }
 

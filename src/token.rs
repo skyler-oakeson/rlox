@@ -1,9 +1,11 @@
 use std::fmt::Display;
 
 #[allow(dead_code)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum TokenType {
     // Single character tokens.
+    Question,
+    Colon,
     LeftParen,
     RightParen,
     LeftBrace,

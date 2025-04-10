@@ -1,7 +1,6 @@
 use std::env;
 use std::fs;
 use std::io::{stdin, stdout, Write};
-use std::process::exit;
 
 mod error_fmt;
 mod expression;
@@ -33,10 +32,9 @@ pub fn parse_args(args: Vec<String>) {
 
 fn run(source: String) {
     // Scanning phase
-    let mut scanner = scanner::Scanner::default();
-    let tokens = scanner.scan_tokens(source);
+    let tokens = scanner::scan_tokens(&source);
     println!("{:?}", tokens);
-    let expr = parser::parse(tokens);
+    let expr = parser::parse(&tokens);
     println!("{}", expr)
 }
 

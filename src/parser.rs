@@ -1,38 +1,70 @@
-use crate::expression::{Bin, Expr, Grp, Lit, Un};
+use crate::expression::{Bin, Cond, Expr, Grp, Lit, Un};
 use crate::marcher::Marcher;
-use crate::token::{Literal, Token, TokenType};
+use crate::token::{Token, TokenType};
 
 /*                    Grammer for lox
  * --------------------------------------------------------
- * expression -> equality;
+ * expression -> ternary;
+ * ternary    -> equality ? expression : expression;
  * equality   -> comparison ( ("=" | "!=") comparison )*;
  * comparison -> term ( (">" | ">=" | "<" | "<=") term )*;
  * term       -> factor ( ("*" | "/") factor)*;
  * factor     -> unary ( ("+" | "-") unary)*;
- * unary      -> ("!" | "-") unary;
- *             | primary
- * primary    -> NUMBER | STRING | "true" | "false" | "nil"
- *             | "(" expression ")";
+ * unary      -> ("!" | "-") unary | primary
+ * primary    -> NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")";
  */
 
 pub struct Parser {
     tokens: Marcher<Token>,
 }
 
-pub fn parse(tokens: Vec<Token>) -> Box<dyn Expr> {
+pub fn parse(tokens: &Vec<Token>) -> Box<dyn Expr> {
     let mut parser = Parser::new(tokens);
     parser.expression()
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: &Vec<Token>) -> Self {
         Parser {
-            tokens: Marcher::new(tokens),
+            tokens: Marcher::new(tokens.to_vec()),
         }
     }
 
     fn expression(&mut self) -> Box<dyn Expr> {
-        return self.equality();
+        let mut expr = self.ternary();
+        while self
+            .tokens
+            .advance_if(|t| t.token_type == TokenType::Comma)
+            .is_some()
+        {
+            expr = self.equality();
+        }
+        expr
+    }
+
+    fn ternary(&mut self) -> Box<dyn Expr> {
+        let mut expr: Box<dyn Expr> = self.equality();
+        if self
+            .tokens
+            .advance_if(|t| t.token_type == TokenType::Question)
+            .is_some()
+        {
+            expr = Box::new(Cond {
+                cond: expr,
+                cons: self.expression(),
+                alt: {
+                    if self
+                        .tokens
+                        .advance_if(|t| t.token_type == TokenType::Colon)
+                        .is_none()
+                    {
+                        panic!("No alternate condition provided")
+                    }
+                    self.expression()
+                },
+            })
+        }
+        expr
     }
 
     fn equality(&mut self) -> Box<dyn Expr> {
@@ -114,49 +146,52 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Box<dyn Expr> {
-        let mut lit = Box::new(Lit { value: None });
-
-        if let Some(_tok) = self.tokens.advance_if(|t| t.token_type == TokenType::False) {
-            lit.value = Some(Box::new(false));
-            return lit;
-        }
-
-        if let Some(_tok) = self.tokens.advance_if(|t| t.token_type == TokenType::True) {
-            lit.value = Some(Box::new(true));
-            return lit;
-        }
-
-        if let Some(_tok) = self.tokens.advance_if(|t| t.token_type == TokenType::Nil) {
-            lit.value = None;
-            return lit;
-        }
-
-        if let Some(tok) = self
-            .tokens
-            .advance_if(|t| t.token_type == TokenType::String)
-        {
-            lit.value = Some(Box::new(tok.literal.clone().unwrap().as_string()));
-            return lit;
-        }
-
-        if let Some(tok) = self
-            .tokens
-            .advance_if(|t| t.token_type == TokenType::Number)
-        {
-            lit.value = Some(Box::new(tok.literal.clone().unwrap().as_number()));
-            return lit;
-        }
-
-        if let Some(_tok) = self
-            .tokens
-            .advance_if(|t| t.token_type == TokenType::LeftParen)
-        {
-            let grp = Box::new(Grp {
-                expression: self.expression(),
-            });
-            return grp;
+        let mut expr: Box<dyn Expr> = Box::new(Lit { value: None });
+        if let Some(t) = self.tokens.advance_if(|t| {
+            t.token_type == TokenType::True
+                || t.token_type == TokenType::Nil
+                || t.token_type == TokenType::String
+                || t.token_type == TokenType::Number
+                || t.token_type == TokenType::LeftParen
+        }) {
+            match &t.token_type {
+                TokenType::True => {
+                    expr = Box::new(Lit {
+                        value: Some(Box::new(true)),
+                    });
+                }
+                TokenType::Nil => {
+                    expr = Box::new(Lit { value: None });
+                }
+                TokenType::String => {
+                    expr = Box::new(Lit {
+                        value: Some(Box::new(t.literal.clone().unwrap().as_string())),
+                    });
+                }
+                TokenType::Number => {
+                    expr = Box::new(Lit {
+                        value: Some(Box::new(t.literal.clone().unwrap().as_number())),
+                    });
+                }
+                TokenType::LeftParen => {
+                    expr = Box::new(Grp {
+                        expression: self.expression(),
+                    });
+                    // Ensure there is a closing paren and consume it
+                    if self
+                        .tokens
+                        .advance_if(|t| t.token_type == TokenType::RightParen)
+                        .is_none()
+                    {
+                        panic!("Invalid token to start an expression.")
+                    };
+                }
+                _ => {}
+            }
+        } else {
+            panic!("Invalid token to start an expression.")
         };
 
-        lit
+        expr
     }
 }
